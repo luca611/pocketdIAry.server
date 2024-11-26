@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 3005;
 // Middleware
 app.use(express.json());
 
+import puppeteer from 'puppeteer';
 
 app.get('/query', async (req, res) => {
     const userQuery = req.query.query;  // Get query parameter from URL
