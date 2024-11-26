@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 import express from 'express';
 import dotenv from 'dotenv';
 import axios from 'axios';
-
+import puppeteer from 'puppeteer-core';
 
 const scriptURL = 'http://pockeddb.rf.gd/query.php?';
 
@@ -14,7 +14,6 @@ const PORT = process.env.PORT || 3005;
 // Middleware
 app.use(express.json());
 
-import puppeteer from 'puppeteer';
 
 app.get('/query', async (req, res) => {
     const userQuery = req.query.query;  // Get query parameter from URL
