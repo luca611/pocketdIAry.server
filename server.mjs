@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 import express from 'express';
 import dotenv from 'dotenv';
 import axios from 'axios';
-import puppeteer from 'puppeteer-core';
+
 
 const scriptURL = 'http://pockeddb.rf.gd/query.php?';
 
