@@ -32,7 +32,7 @@ app.get('/query', async (req, res) => {
                 "--single-process",
                 "--no-zygote",
             ],
-            exeutablePath: process.env.NODE_ENV === 'production' ? process.env.PUPPETEER_EXECUTABLE_PATH : puppeteer.executablePath();
+            exeutablePath: process.env.NODE_ENV === 'production' ? process.env.PUPPETEER_EXECUTABLE_PATH : puppeteer.executablePath(),
         });
         const page = await browser.newPage();
 
