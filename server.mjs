@@ -32,7 +32,7 @@ app.get('/query', async (req, res) => {
                 "--single-process",
                 "--no-zygote",
             ],
-            exeutablePath: process.env.NODE_ENV === 'production' ? process.env.PUPPETEER_EXECUTABLE_PATH : puppeteer.executablePath(),
+            executablePath: '/usr/bin/chromium',
         });
         const page = await browser.newPage();
 
