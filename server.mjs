@@ -84,7 +84,25 @@ app.get('/', (req, res) => {
     res.send('Welcome pocket API!');
 });
 
+// Keep-Alive Function
+function keepServerAlive() {
+    setInterval(async () => {
+        try {
+            // Send a request to the root endpoint to keep the server alive
+            await fetch(`http://localhost:${PORT}/`);
+            console.log('Keep-alive: Server pinged successfully');
+
+            // Run a simple query to keep the database connection alive
+            await client.query('SELECT 1');
+            console.log('Keep-alive: Database connection is active');
+        } catch (error) {
+            console.error('Keep-alive error:', error);
+        }
+    }, 5 * 60 * 1000); // Run every 5 minutes
+}
+
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    keepServerAlive(); // Start the keep-alive function
 });
