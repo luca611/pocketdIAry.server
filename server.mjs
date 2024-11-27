@@ -1,10 +1,8 @@
 import fetch from 'node-fetch';
 import express from 'express';
 import dotenv from 'dotenv';
-import axios from 'axios';
+import pkg from 'pg';
 
-
-const scriptURL = 'http://pockeddb.rf.gd/query.php?';
 
 dotenv.config();
 
@@ -14,61 +12,35 @@ const PORT = process.env.PORT || 3005;
 // Middleware
 app.use(express.json());
 
-import puppeteer from 'puppeteer';
 
-app.get('/query', async (req, res) => {
-    const userQuery = req.query.query;  // Get query parameter from URL
+// Load environment variables from .env
+dotenv.config();
 
-    if (!userQuery) {
-        return res.status(400).json({ error: 'Query parameter is required' });
-    }
+const { Client } = pkg;  // Destructure Client from the imported pg package
+
+const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false } // Required for Render's SSL connection
+});
+
+// Connect to the PostgreSQL database
+client.connect()
+.then(() => console.log('Connected to PostgreSQL'))
+.catch(err => console.error('Connection error', err.stack));
+
+// Endpoint: Execute a custom SQL query
+app.post('/pocketDb', async (req, res) => {
+    const { query, params } = req.body;
 
     try {
-        // Launch Puppeteer and make the request
-        const browser = await puppeteer.launch({
-            args:[
-                "--disable-setuid-sandbox",
-                "--no-sandbox",
-                "--single-process",
-                "--no-zygote",
-            ],
-            executablePath: '/usr/bin/chromium',
-        });
-        const page = await browser.newPage();
-
-        // Set up necessary headers
-        await page.setExtraHTTPHeaders({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
-        });
-
-        // Go to the URL with the provided query
-        await page.goto(`http://pockeddb.rf.gd/query.php?query=${encodeURIComponent(userQuery)}`, {
-            waitUntil: 'networkidle2',
-        });
-
-        // Extract the JSON data from the <pre> tag
-        const jsonData = await page.evaluate(() => {
-            const preTag = document.querySelector('pre');
-            return preTag ? preTag.innerText : null;
-        });
-
-        if (jsonData) {
-            try {
-                // Parse the JSON data and return it
-                const cleanedData = JSON.parse(jsonData);
-                res.json(cleanedData);
-            } catch (error) {
-                res.status(500).json({ error: 'Error parsing JSON from the response' });
-            }
-        } else {
-            res.status(500).json({ error: 'No JSON data found in the response' });
+        if (!query) {
+            return res.status(400).json({ error: 'Query is required' });
         }
 
-        // Close the browser after processing the request
-        await browser.close();
-    } catch (error) {
-        console.error('Error with Puppeteer:', error);
-        res.status(500).json({ error: 'Error processing the request' });
+        const result = await client.query(query, params || []);
+        res.status(200).json({ rows: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
