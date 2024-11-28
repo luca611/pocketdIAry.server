@@ -3,51 +3,41 @@ import express from 'express';
 import dotenv from 'dotenv';
 import pkg from 'pg';
 
+const INTERVAL = 5 * 60 * 1000;
+const ERROR = 400;
+const SUCCESS = 200;
+const INTERNALERR = 500;
 
-dotenv.config();
+const AIAPIURL = 'https://api.groq.com/openai/v1/chat/completions';
+const AIMODEL = 'llama3-70b-8192';
+
+const { Client } = pkg;
 
 const app = express();
 const PORT = process.env.PORT || 3005;
 
-// Middleware
+
+//--- loading env ---
+
 app.use(express.json());
-
-
-// Load environment variables from .env
 dotenv.config();
 
-const { Client } = pkg;  // Destructure Client from the imported pg package
 
+//--- db connection ---
 const client = new Client({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false } // Required for Render's SSL connection
+    ssl: { rejectUnauthorized: false }
 });
 
-// Connect to the PostgreSQL database
 client.connect()
 .then(() => console.log('Connected to PostgreSQL'))
 .catch(err => console.error('Connection error', err.stack));
 
-// Endpoint: Execute a custom SQL query
-app.post('/pocketDb', async (req, res) => {
-    const { query, params } = req.body;
+//--- endpoints logic ---
 
+async function getAiResponse(userMessage) {
     try {
-        if (!query) {
-            return res.status(400).json({ error: 'Query is required' });
-        }
-
-        const result = await client.query(query, params || []);
-        res.status(200).json({ rows: result.rows });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Function to interact with the Groq API
-async function getGroqChatCompletion(userMessage) {
-    try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const response = await fetch(AIAPIURL, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
@@ -55,54 +45,63 @@ async function getGroqChatCompletion(userMessage) {
             },
             body: JSON.stringify({
                 messages: [{ role: 'user', content: userMessage }],
-                model: 'llama3-70b-8192',
+                model: AIMODEL,
             }),
         });
-
         const data = await response.json();
         return data.choices[0]?.message?.content || "No response";
     } catch (error) {
-        console.error('Error fetching Groq API:', error);
-        return "Error communicating with Groq API";
+        console.error('-> Error: fetching AI API:', error);
+        return "Error communicating with AI API";
     }
 }
 
-// API Endpoint to use the getGroqChatCompletion function
-app.post('/chat', async (req, res) => {
-    const { message } = req.body;
+function keepServerAlive() {
+    setInterval(async () => {
+        try {
+            await fetch(`http://localhost:${PORT}/`);
+            await client.query('SELECT 1');
+        } catch (error) {
+            console.error('Keep-alive error:', error);
+        }
+    }, INTERVAL);
+}
 
-    if (!message) {
-        return res.status(400).json({ error: 'Message is required' });
-    }
 
-    const response = await getGroqChatCompletion(message);
-    res.json({ response });
-});
+//--- endpoints ---
 
-// Root endpoint
 app.get('/', (req, res) => {
     res.send('Welcome pocket API!');
 });
 
-// Keep-Alive Function
-function keepServerAlive() {
-    setInterval(async () => {
-        try {
-            // Send a request to the root endpoint to keep the server alive
-            await fetch(`http://localhost:${PORT}/`);
-            console.log('Keep-alive: Server pinged successfully');
+app.post('/chat', async (req, res) => {
+    const { message } = req.body;
+    if (!message) {
+        return res.status(ERROR).json({ error: 'Message not provided'});
+    }
+    const response = await getAiResponse(message);
+    res.json({ response });
+});
 
-            // Run a simple query to keep the database connection alive
-            await client.query('SELECT 1');
-            console.log('Keep-alive: Database connection is active');
-        } catch (error) {
-            console.error('Keep-alive error:', error);
+app.post('/pocketDb', async (req, res) => {
+    const { query, params } = req.body;
+    try {
+        if (!query) {
+            return res.status(ERROR).json({ error: 'Query not provided' });
         }
-    }, 5 * 60 * 1000); // Run every 5 minutes
-}
+        const result = await client.query(query, params || []);
+        res.status(SUCCESS).json({ rows: result.rows });
+    } catch (err) {
+        res.status(INTERNALERR).json({ error: err.message });
+    }
+});
 
-// Start the server
+
+//
 app.listen(PORT, () => {
+    console.log(`---------------------------------`);
     console.log(`Server is running on port ${PORT}`);
-    keepServerAlive(); // Start the keep-alive function
+    console.log(`---------------------------------`);
+
+    keepServerAlive();
 });
