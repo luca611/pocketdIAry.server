@@ -31,8 +31,8 @@ const client = new Client({
 });
 
 client.connect()
-.then(() => console.log('Connected to PostgreSQL'))
-.catch(err => console.error('Connection error', err.stack));
+    .then(() => console.log('✓ -> Connected to PostgreSQL successfully'))
+    .catch(err => console.error('Connection error', err.stack));
 
 //--- endpoints logic ---
 
@@ -52,7 +52,7 @@ async function getAiResponse(userMessage) {
         const data = await response.json();
         return data.choices[0]?.message?.content || "No response";
     } catch (error) {
-        console.error('-> Error: fetching AI API:', error);
+        console.error('x -> Error: fetching AI API:', error);
         return "Error communicating with AI API";
     }
 }
@@ -62,9 +62,9 @@ function keepServerAlive() {
         try {
             await fetch(`http://localhost:${PORT}/`);
             await client.query('SELECT 1');
-            console.log('Keepalive -> executed at: ' + new Date().toLocaleString());
+            console.log('✓ -> Keepalive executed at: ' + new Date().toLocaleString());
         } catch (error) {
-            console.error('Keep-alive error:', error);
+            console.error('x -> Keep-alive error:', error);
         }
     }, INTERVAL);
 }
@@ -74,7 +74,7 @@ function generateKey() {
 }
 
 function encryptMessage(key, message) {
-    const iv = Buffer.alloc(16, 0); 
+    const iv = Buffer.alloc(16, 0);
     const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(key, 'hex'), iv);
     let encrypted = cipher.update(message, 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -90,9 +90,9 @@ function decryptMessage(key, encryptedMessage) {
 }
 
 function createHash(data) {
-    const hash = crypto.createHash('sha256'); 
-    hash.update(data); 
-    return hash.digest('hex');  
+    const hash = crypto.createHash('sha256');
+    hash.update(data);
+    return hash.digest('hex');
 }
 
 const sendErrorResponse = (res, status, message) => res.status(status).json({ error: message });
@@ -240,7 +240,7 @@ app.post('/register', async (req, res) => {
             VALUES ($1, $2, $3, $4, $5)
         `;
         const params = [email, password, ntema, name, key];
-        const result = await client.query(query, params);
+        await client.query(query, params);
 
         sendSuccessResponse(res, { message: 'OK' });
     } catch (err) {
@@ -351,7 +351,7 @@ app.patch('/userUpdate', async (req, res) => {
     if (email.length > 128 || password > 128 || typeof ntema !== 'number' || name > 128) {
         return sendErrorResponse(res, ERROR, "A parameter is too long or the type dosen't match the expected one");
     }
-    
+
     let updateFields = [];
     let params = [];
 
@@ -408,7 +408,7 @@ app.patch('/userUpdate', async (req, res) => {
 */
 
 app.post('/addNote', async (req, res) => {
-    let { key, title, description, date, email} = req.body;
+    let { key, title, description, date, email } = req.body;
     if (!key || !title || !description || !date || !email) {
         return sendErrorResponse(res, ERROR, 'Invalid inputs');
     }
@@ -442,15 +442,118 @@ app.post('/addNote', async (req, res) => {
 
 });
 
+/*
+    notes fetch route
+    @param key: user key
+    @param email: user email
+    @param date: note date
+
+    @return notes: list of notes
+
+    warning: for some reasons postgree dastes are 1 day behind
+             this won't affect the functionality of the endpoin
+             but will appear in the output
+*/
+
+app.get('/getNotes', async (req, res) => {
+    let { key, email, date } = req.body;
+    if (!key || !email || !date) {
+        return sendErrorResponse(res, ERROR, 'Invalid inputs');
+    }
+
+    email = encryptMessage(process.env.ENCRYPT_KEY, email);
+
+    try {
+        let query = `
+            SELECT * from studenti WHERE chiave = $1 and email = $2
+        `;
+        let params = [key, email];
+        let result = await client.query(query, params);
+
+        if (result.rows.length === 0) {
+            return sendErrorResponse(res, ERROR, 'user not found');
+        }
+
+        query = `
+            SELECT * from note WHERE idStudente = $1 AND dataora = $2 
+        `;
+        params = [email, date];
+        result = await client.query(query, params);
+
+        let notes = result.rows.map((note) => {
+            return {
+                title: decryptMessage(key, note.titolo),
+                description: decryptMessage(key, note.testo),
+                dataora: note.dataora
+            };
+        }
+        );
+
+        sendSuccessResponse(res, { notes });
+    } catch (err) {
+        sendErrorResponse(res, INTERNALERR, err.message);
+    }
+});
+
+/*
+    notes fetch route
+    @param key: user key
+    @param email: user email
+    
+    @return notes: list of today notes
+
+    warning: shares the same issue as the previous endpoint
+*/
+
+app.get('/getTodayNotes', async (req, res) => {
+    let { key, email } = req.body;
+    if (!key || !email) {
+        return sendErrorResponse(res, ERROR, 'Invalid inputs');
+    }
+
+    email = encryptMessage(process.env.ENCRYPT_KEY, email);
+
+    try {
+        let query = `
+            SELECT * from studenti WHERE chiave = $1 and email = $2
+        `;
+        let params = [key, email];
+        let result = await client.query(query, params);
+
+        if (result.rows.length === 0) {
+            return sendErrorResponse(res, ERROR, 'user not found');
+        }
+
+        query = `
+            SELECT * from note WHERE idStudente = $1 AND dataora = CURRENT_DATE
+        `;
+        params = [email];
+        result = await client.query(query, params);
+
+        let notes = result.rows.map((note) => {
+            return {
+                title: decryptMessage(key, note.titolo),
+                description: decryptMessage(key, note.testo),
+                dataora: note.dataora
+            };
+        }
+        );
+
+        sendSuccessResponse(res, { notes });
+    } catch (err) {
+        sendErrorResponse(res, INTERNALERR, err.message);
+    }
+});
+
 //--- not existing endpoint handler ---
 
 /*
     Not existing endpoint handler
-
+ 
     @return availableEndpoints: list of available endpoints
 */
 app.use((req, res) => {
-    console.error(`Attempt to access unknown endpoint: ${req.method} ${req.originalUrl}`);
+    console.warn(`⚠ -> Attempt to access unknown endpoint: ${req.method} ${req.originalUrl}`);
     const availableRoutes = getAvailableRoutes(app);
     res.status(NOTFOUND).json({
         error: 'Endpoint not found',
@@ -460,9 +563,9 @@ app.use((req, res) => {
 
 //--- server start ---
 app.listen(PORT, () => {
-    console.log(`---------------------------------`);
+    console.log(`------------------------------------------------`);
     console.log(`Server is running on port ${PORT}`);
-    console.log(`---------------------------------`);
+    console.log(`------------------------------------------------`);
 
     keepServerAlive();
 });
