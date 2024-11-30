@@ -285,7 +285,7 @@ app.post('/login', async (req, res) => {
 });
 
 /*
-    Delete user from the database
+    user deletion route
     @param key: user key
     @param email: user email
     @param password: user password
@@ -333,7 +333,7 @@ app.delete('/userDelete', async (req, res) => {
 });
 
 /*
-    Update user information
+    user information update route
     @param key: user key
     @param email: user email <optional>
     @param password: user password <optional>
@@ -399,7 +399,7 @@ app.patch('/userUpdate', async (req, res) => {
 });
 
 /*
-    Add a note to the database
+    note creation route
     @param key: user key
     @param title: note title
     @param description: note description
@@ -444,6 +444,11 @@ app.post('/addNote', async (req, res) => {
 
 //--- not existing endpoint handler ---
 
+/*
+    Not existing endpoint handler
+
+    @return availableEndpoints: list of available endpoints
+*/
 app.use((req, res) => {
     console.error(`Attempt to access unknown endpoint: ${req.method} ${req.originalUrl}`);
     const availableRoutes = getAvailableRoutes(app);
