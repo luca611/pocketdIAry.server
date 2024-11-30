@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 
 import pkg from 'pg';
+import { timeEnd } from 'console';
 
 const INTERVAL = 5 * 60 * 1000;
 const ERROR = 400;
@@ -61,6 +62,7 @@ function keepServerAlive() {
         try {
             await fetch(`http://localhost:${PORT}/`);
             await client.query('SELECT 1');
+            console.log('Keepalive -> executed at: ' + new Date().toLocaleString());
         } catch (error) {
             console.error('Keep-alive error:', error);
         }
@@ -93,97 +95,111 @@ function createHash(data) {
     return hash.digest('hex');  
 }
 
+const sendErrorResponse = (res, status, message) => res.status(status).json({ error: message });
+const sendSuccessResponse = (res, data) => res.status(SUCCESS).json(data);
+
 //--- endpoints ---
 
+// Home route
 app.get('/', (req, res) => {
-    res.send('Welcome pocket API!');
+    res.send('Welcome to Pocket API!');
 });
 
+// Chat route to get AI response
 app.post('/chat', async (req, res) => {
     const { message } = req.body;
     if (!message) {
-        return res.status(ERROR).json({ error: 'Message not provided'});
+        return sendErrorResponse(res, ERROR, 'Message not provided');
     }
-    const response = await getAiResponse(message);
-    res.json({ response });
-});
 
-app.get('/pocketDb', async (req, res) => {
-    const { query, params } = req.body;
     try {
-        if (!query) {
-            return res.status(ERROR).json({ error: 'Query not provided' });
-        }
-        const result = await client.query(query, params || []);
-        res.status(SUCCESS).json({ rows: result.rows });
+        const response = await getAiResponse(message);
+        sendSuccessResponse(res, { response });
     } catch (err) {
-        res.status(INTERNALERR).json({ error: err.message });
+        sendErrorResponse(res, INTERNALERR, err.message);
     }
 });
 
+// Database query route
+app.post('/pocketDb', async (req, res) => {
+    const { query, params = [] } = req.body;
+    if (!query) {
+        return sendErrorResponse(res, ERROR, 'Query not provided');
+    }
+
+    try {
+        const result = await client.query(query, params);
+        sendSuccessResponse(res, { rows: result.rows });
+    } catch (err) {
+        sendErrorResponse(res, INTERNALERR, err.message);
+    }
+});
+
+// Encrypt message route
 app.post('/encrypt', (req, res) => {
     const { key, message } = req.body;
     if (!key || !message) {
-      return res.status(ERROR).json({ error: 'Missing key or message' });
+        return sendErrorResponse(res, ERROR, 'Missing key or message');
     }
+
     try {
-      const encryptedMessage = encryptMessage(key, message);
-      res.json({ encryptedMessage });
-    }catch (error) {
-      res.status(INTERNALERR).json({ error: 'Invalid key' });
+        const encryptedMessage = encryptMessage(key, message);
+        sendSuccessResponse(res, { encryptedMessage });
+    } catch {
+        sendErrorResponse(res, INTERNALERR, 'Invalid key');
     }
 });
 
+// Decrypt message route
 app.post('/decrypt', (req, res) => {
     const { key, message } = req.body;
     if (!key || !message) {
-      return res.status(ERROR).json({ error: 'Missing key or message' });
+        return sendErrorResponse(res, ERROR, 'Missing key or message');
     }
+
     try {
-      const decryptedMessage = decryptMessage(key, message);
-      res.json({ decryptedMessage });
-    }catch (error) {
-      res.status(INTERNALERR).json({ error: 'Invalid key' });
+        const decryptedMessage = decryptMessage(key, message);
+        sendSuccessResponse(res, { decryptedMessage });
+    } catch {
+        sendErrorResponse(res, INTERNALERR, 'Invalid key');
     }
 });
 
+// User registration route
 app.post('/register', async (req, res) => {
-  let { email, password, ntema, name } = req.body;
-  try {
-    if (
-      !email || !password || !name || typeof ntema !== 'number' ||
-      email.length > 128 || password.length > 128 || name.length > 128
-    ) {
-      return res.status(ERROR).json({ error: 'invalid inputs' });
+    let { email, password, ntema, name } = req.body;
+    if (!email || !password || !name || typeof ntema !== 'number' ||
+        email.length > 128 || password.length > 128 || name.length > 128) {
+        return sendErrorResponse(res, ERROR, 'Invalid inputs');
     }
 
-    email = encryptMessage(process.env.ENCRYPT_KEY, email);
-    name = encryptMessage(process.env.ENCRYPT_KEY, name);
-    password = createHash(password);
+    try {
+        email = encryptMessage(process.env.ENCRYPT_KEY, email);
+        name = encryptMessage(process.env.ENCRYPT_KEY, name);
+        password = createHash(password);
+        const key = generateKey();
 
-    const key =  generateKey();
-    const query = `
-      INSERT INTO studenti (email, password, ntema, nome, chiave)
-      VALUES ($1, $2, $3, $4, $5)
-    `;
-    const params = [email, password, ntema, name, key];
-    await client.query(query, params);
+        const query = `
+            INSERT INTO studenti (email, password, ntema, nome, chiave)
+            VALUES ($1, $2, $3, $4, $5)
+        `;
+        const params = [email, password, ntema, name, key];
+        await client.query(query, params);
 
-    res.status(SUCCESS).json({
-      message: 'OK',
-    });
-  } catch (err) {
-    res.status(INTERNALERR).json({ error: err.message });
-  }
+        sendSuccessResponse(res, { message: 'OK' });
+    } catch (err) {
+        sendErrorResponse(res, INTERNALERR, err.message);
+    }
 });
 
-app.get('/logn', async (req, res) => {
+// User login route
+app.post('/logn', async (req, res) => {
     let { email, password } = req.body;
+    if (!email || !password) {
+        return sendErrorResponse(res, ERROR, 'Invalid inputs');
+    }
 
     try {
-        if (!email || !password) {
-            return res.status(ERROR).json({ error: 'invalid inputs' });
-        }
         email = encryptMessage(process.env.ENCRYPT_KEY, email);
         password = createHash(password);
 
@@ -196,14 +212,12 @@ app.get('/logn', async (req, res) => {
         const result = await client.query(query, params);
 
         if (result.rows.length === 0) {
-            return res.status(ERROR).json({ error: 'invalid credentials' });
+            return sendErrorResponse(res, ERROR, 'Invalid credentials');
         }
 
-        res.status(SUCCESS).json({
-            key: result.rows[0].chiave,
-        });
+        sendSuccessResponse(res, { key: result.rows[0].chiave });
     } catch (err) {
-        res.status(INTERNALERR).json({ error: err.message });
+        sendErrorResponse(res, INTERNALERR, err.message);
     }
 });
 
