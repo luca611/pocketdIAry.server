@@ -5,7 +5,7 @@ import crypto from 'crypto';
 
 import pkg from 'pg';
 
-const INTERVAL = 5 * 60 * 1000;
+const INTERVAL = 4 * 60 * 1000;
 const ERROR = 400;
 const SUCCESS = 200;
 const INTERNALERR = 500;
