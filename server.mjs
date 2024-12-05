@@ -7,7 +7,6 @@ import cors from 'cors';
 import pkg from 'pg';
 
 
-app.use(cors());
 
 const INTERVAL = 4 * 60 * 1000;
 const ERROR = 400;
@@ -27,6 +26,9 @@ const PORT = process.env.PORT || 3005;
 
 app.use(express.json());
 dotenv.config();
+
+
+app.use(cors());
 
 //--- db connection ---
 const client = new Client({
