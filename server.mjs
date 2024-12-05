@@ -25,7 +25,13 @@ const PORT = process.env.PORT || 3005;
 app.use(express.json());
 dotenv.config();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "*", // Allow all origins temporarily
+    methods: "GET,POST,DELETE,PATCH",
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 //--- db connection ---
 const client = new Client({
