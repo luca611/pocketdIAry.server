@@ -2,8 +2,12 @@ import fetch from 'node-fetch';
 import express from 'express';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import cors from 'cors';
 
 import pkg from 'pg';
+
+
+app.use(cors());
 
 const INTERVAL = 4 * 60 * 1000;
 const ERROR = 400;
