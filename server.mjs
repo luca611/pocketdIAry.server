@@ -584,6 +584,47 @@ app.get("/getTodayNotes", async (req, res) => {
   }
 });
 
+/*
+    notes fetch route
+    @param key: user key
+    @param email: user email
+
+    @return notes: list of all notes
+*/
+app.post("/checkAvailability", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || email.length > 128) {
+    return sendErrorResponse(res, ERROR, "Invalid email");
+  }
+
+  try {
+    const emailExists = await checkEmailExists(email);
+
+    if (emailExists) {
+      return sendErrorResponse(res, ERROR, "Email is already taken");
+    }
+
+    sendSuccessResponse(res, { message: "Email is available" });
+  } catch (err) {
+    sendErrorResponse(res, INTERNALERR, err.message);
+  }
+});
+
+async function checkEmailExists(email) {
+  const encryptedEmail = encryptMessage(process.env.ENCRYPT_KEY, email);
+  const checkQuery = `SELECT 1 FROM studenti WHERE email = $1 LIMIT 1`;
+  const checkParams = [encryptedEmail];
+
+  try {
+    const result = await client.query(checkQuery, checkParams);
+    return result.rows.length > 0; // Returns true if the email exists
+  } catch (err) {
+    console.error("Error checking email existence:", err);
+    return false; // In case of error, assume email doesn't exist
+  }
+}
+
 //--- not existing endpoint handler ---
 
 /*
