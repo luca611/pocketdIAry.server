@@ -2,6 +2,7 @@ import fetch from "node-fetch";
 import express from "express";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import cors from "cors";
 
 import pkg from "pg";
 
@@ -23,6 +24,8 @@ const PORT = process.env.PORT || 3005;
 
 app.use(express.json());
 dotenv.config();
+
+app.use(cors());
 
 //--- db connection ---
 const client = new Client({
