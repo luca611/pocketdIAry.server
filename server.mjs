@@ -273,9 +273,9 @@ app.post('/login', async (req, res) => {
         password = createHash(password);
 
         const query = `
-            SELECT chiave
-            FROM studenti
-            WHERE email = $1 AND password = $2
+        SELECT chiave, nome, ntema
+        FROM studenti
+        WHERE email = $1 AND password = $2
         `;
         const params = [email, password];
         const result = await client.query(query, params);
@@ -284,7 +284,14 @@ app.post('/login', async (req, res) => {
             return sendErrorResponse(res, ERROR, 'Invalid credentials');
         }
 
-        sendSuccessResponse(res, { key: result.rows[0].chiave });
+        const user = result.rows[0];
+        const name = decryptMessage(process.env.ENCRYPT_KEY, user.nome);
+
+        sendSuccessResponse(res, {
+            key: user.chiave,
+            name: name,
+            theme: user.ntema
+        });
     } catch (err) {
         sendErrorResponse(res, INTERNALERR, err.message);
     }
