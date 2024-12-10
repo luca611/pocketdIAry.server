@@ -268,6 +268,7 @@ app.post("/register", async (req, res) => {
 
   try {
     // Validate the email using a utility function
+    console.log("Validating email:", email);
     const { valid, error } = await validate(email);
     if (!valid) {
       return sendErrorResponse(res, ERROR, error || "Invalid or non-existing email.");
