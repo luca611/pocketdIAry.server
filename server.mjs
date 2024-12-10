@@ -590,10 +590,6 @@ app.post("/getTodayNotes", async (req, res) => {
     params = [email];
     result = await client.query(query, params);
 
-    if (result.rows.length === 0) {
-      return sendErrorResponse(res, ERROR, "No notes for today");
-    }
-
     let notes = result.rows.map((note) => {
       return {
         title: decryptMessage(key, note.titolo),
@@ -602,7 +598,8 @@ app.post("/getTodayNotes", async (req, res) => {
       };
     });
 
-    sendSuccessResponse(res, { notes });
+    // If no notes, return an empty array
+    sendSuccessResponse(res, { notes: notes.length > 0 ? notes : [] });
   } catch (err) {
     console.error("Error during fetch:", err.message);
     return sendErrorResponse(res, INTERNALERR, "An error occurred on the server.");
