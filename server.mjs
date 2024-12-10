@@ -159,7 +159,7 @@ app.get("/", (req, res) => {
 
     @return response: AI response
 */
-app.get("/chat", async (req, res) => {
+app.post("/chat", async (req, res) => {
   const { message } = req.body;
   if (!message) {
     return sendErrorResponse(res, ERROR, "Message not provided");
@@ -181,7 +181,7 @@ app.get("/chat", async (req, res) => {
     @return rows: query result rows
 */
 
-app.get("/pocketDb", async (req, res) => {
+app.post("/pocketDb", async (req, res) => {
   const { query, params = [] } = req.body;
   if (!query) {
     return sendErrorResponse(res, ERROR, "Query not provided");
@@ -510,7 +510,7 @@ app.post("/addNote", async (req, res) => {
              but will appear in the output
 */
 
-app.get("/getNotes", async (req, res) => {
+app.post("/getNotes", async (req, res) => {
   let { key, email, date } = req.body;
   if (!key || !email || !date) {
     return sendErrorResponse(res, ERROR, "Invalid inputs");
@@ -559,7 +559,7 @@ app.get("/getNotes", async (req, res) => {
     warning: shares the same issue as the previous endpoint
 */
 
-app.get("/getTodayNotes", async (req, res) => {
+app.post("/getTodayNotes", async (req, res) => {
   let { key, email } = req.body;
   if (!key || !email) {
     return sendErrorResponse(res, ERROR, "Invalid inputs");
