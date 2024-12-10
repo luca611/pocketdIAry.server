@@ -251,7 +251,9 @@ app.post("/decrypt", (req, res) => {
     @return message: "OK" if the user was registered
 */
 app.post("/register", async (req, res) => {
-  let { email, password, ntema, name } = req.body;
+  const { email, password, ntema, name } = req.body;
+
+  // Input validation
   if (
     !email ||
     !password ||
@@ -261,31 +263,41 @@ app.post("/register", async (req, res) => {
     password.length > 128 ||
     name.length > 128
   ) {
-    return sendErrorResponse(res, ERROR, "Invalid inputs");
-  }
-
-  const validationResult = await validate(email);
-
-  if (!validationResult.valid) {
-    return sendErrorResponse(res, ERROR, "not existing email");
+    return sendErrorResponse(res, ERROR, "Invalid input parameters.");
   }
 
   try {
-    email = encryptMessage(process.env.ENCRYPT_KEY, email);
-    name = encryptMessage(process.env.ENCRYPT_KEY, name);
-    password = createHash(password);
-    const key = generateKey();
+    // Validate the email using a utility function
+    const { valid, error } = await validate(email);
+    if (!valid) {
+      return sendErrorResponse(res, ERROR, error || "Invalid or non-existing email.");
+    }
 
-    const query = `
-            INSERT INTO studenti (email, password, ntema, nome, chiave)
-            VALUES ($1, $2, $3, $4, $5)
-        `;
-    const params = [email, password, ntema, name, key];
-    await client.query(query, params);
+    // Encrypt sensitive information
+    const encryptedEmail = encryptMessage(process.env.ENCRYPT_KEY, email);
+    const encryptedName = encryptMessage(process.env.ENCRYPT_KEY, name);
+    const hashedPassword = createHash(password);
+    const generatedKey = generateKey();
 
-    sendSuccessResponse(res, { message: "OK" });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
+    // Insert user data into the database
+    const insertQuery = `
+      INSERT INTO studenti (email, password, ntema, nome, chiave)
+      VALUES ($1, $2, $3, $4, $5)
+    `;
+    const insertParams = [encryptedEmail, hashedPassword, ntema, encryptedName, generatedKey];
+    await client.query(insertQuery, insertParams);
+
+    // Respond with success
+    sendSuccessResponse(res, { message: "Registration successful!" });
+  } catch (error) {
+    // Handle specific database errors (e.g., unique constraint violations)
+    if (error.code === "23505") { // PostgreSQL unique violation error code
+      return sendErrorResponse(res, ERROR, "Email already registered.");
+    }
+
+    // Handle other errors
+    console.error("Error during registration:", error.message);
+    sendErrorResponse(res, INTERNALERR, "An error occurred. Please try again later.");
   }
 });
 
