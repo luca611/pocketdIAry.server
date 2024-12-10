@@ -3,6 +3,7 @@ import express from "express";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import cors from "cors";
+import { validate } from 'deep-email-validator';
 
 import pkg from "pg";
 
@@ -263,6 +264,12 @@ app.post("/register", async (req, res) => {
     return sendErrorResponse(res, ERROR, "Invalid inputs");
   }
 
+  const validationResult = await validate(email);
+
+  if (!validationResult.valid) {
+    return sendErrorResponse(res, ERROR, "not existing email");
+  }
+
   try {
     email = encryptMessage(process.env.ENCRYPT_KEY, email);
     name = encryptMessage(process.env.ENCRYPT_KEY, name);
@@ -300,7 +307,7 @@ app.post("/login", async (req, res) => {
     email = encryptMessage(process.env.ENCRYPT_KEY, email);
     password = createHash(password);
 
-        const query = `
+    const query = `
         SELECT chiave, nome, ntema
         FROM studenti
         WHERE email = $1 AND password = $2
@@ -312,17 +319,17 @@ app.post("/login", async (req, res) => {
       return sendErrorResponse(res, ERROR, "Invalid credentials");
     }
 
-        const user = result.rows[0];
-        const name = decryptMessage(process.env.ENCRYPT_KEY, user.nome);
+    const user = result.rows[0];
+    const name = decryptMessage(process.env.ENCRYPT_KEY, user.nome);
 
-        sendSuccessResponse(res, {
-            key: user.chiave,
-            name: name,
-            theme: user.ntema
-        });
-    } catch (err) {
-        sendErrorResponse(res, INTERNALERR, err.message);
-    }
+    sendSuccessResponse(res, {
+      key: user.chiave,
+      name: name,
+      theme: user.ntema
+    });
+  } catch (err) {
+    sendErrorResponse(res, INTERNALERR, err.message);
+  }
 });
 
 /*
