@@ -576,21 +576,23 @@ app.post("/getTodayNotes", async (req, res) => {
   email = encryptMessage(process.env.ENCRYPT_KEY, email);
 
   try {
-    let query = `
-            SELECT * from studenti WHERE chiave = $1 and email = $2
-        `;
+    // Check if the user exists in the database
+    let query = `SELECT * FROM studenti WHERE chiave = $1 AND email = $2`;
     let params = [key, email];
     let result = await client.query(query, params);
 
     if (result.rows.length === 0) {
-      return sendErrorResponse(res, ERROR, "user not found");
+      return sendErrorResponse(res, ERROR, "User not found");
     }
 
-    query = `
-            SELECT * from note WHERE idStudente = $1 AND dataora = CURRENT_DATE
-        `;
+    // Fetch the notes for the current day
+    query = `SELECT * FROM note WHERE idStudente = $1 AND dataora = CURRENT_DATE`;
     params = [email];
     result = await client.query(query, params);
+
+    if (result.rows.length === 0) {
+      return sendErrorResponse(res, ERROR, "No notes for today");
+    }
 
     let notes = result.rows.map((note) => {
       return {
@@ -602,7 +604,8 @@ app.post("/getTodayNotes", async (req, res) => {
 
     sendSuccessResponse(res, { notes });
   } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
+    console.error("Error during fetch:", err.message);
+    return sendErrorResponse(res, INTERNALERR, "An error occurred on the server.");
   }
 });
 
