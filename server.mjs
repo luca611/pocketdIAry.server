@@ -3,7 +3,6 @@ import express from "express";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import cors from "cors";
-import { validate } from 'deep-email-validator';
 
 import pkg from "pg";
 
@@ -142,6 +141,11 @@ const getAvailableRoutes = (app) => {
   return routes;
 };
 
+function validateEmailFormat(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
 //--- endpoints ---
 
 // Home route
@@ -266,21 +270,17 @@ app.post("/register", async (req, res) => {
     return sendErrorResponse(res, ERROR, "Invalid input parameters.");
   }
 
-  try {
-    // Validate the email using a utility function
-    console.log("Validating email:", email);
-    const { valid, error } = await validate(email);
-    if (!valid) {
-      return sendErrorResponse(res, ERROR, error || "Invalid or non-existing email.");
-    }
+  if (!validateEmailFormat(email)) {
+    return sendErrorResponse(res, ERROR, "Invalid email format.");
+  }
 
-    // Encrypt sensitive information
+  try {
     const encryptedEmail = encryptMessage(process.env.ENCRYPT_KEY, email);
     const encryptedName = encryptMessage(process.env.ENCRYPT_KEY, name);
     const hashedPassword = createHash(password);
     const generatedKey = generateKey();
 
-    // Insert user data into the database
+    // Insert into the database
     const insertQuery = `
       INSERT INTO studenti (email, password, ntema, nome, chiave)
       VALUES ($1, $2, $3, $4, $5)
@@ -288,20 +288,15 @@ app.post("/register", async (req, res) => {
     const insertParams = [encryptedEmail, hashedPassword, ntema, encryptedName, generatedKey];
     await client.query(insertQuery, insertParams);
 
-    // Respond with success
     sendSuccessResponse(res, { message: "Registration successful!" });
   } catch (error) {
-    // Handle specific database errors (e.g., unique constraint violations)
-    if (error.code === "23505") { // PostgreSQL unique violation error code
+    if (error.code === "23505") {
       return sendErrorResponse(res, ERROR, "Email already registered.");
     }
-
-    // Handle other errors
     console.error("Error during registration:", error.message);
-    sendErrorResponse(res, INTERNALERR, "An error occurred. Please try again later.");
+    sendErrorResponse(res, INTERNALERR, "An error occurred. Please try again.");
   }
 });
-
 /*
     Login route
     @param email: user email
