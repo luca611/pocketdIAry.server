@@ -592,6 +592,7 @@ app.post("/getTodayNotes", async (req, res) => {
 
     let notes = result.rows.map((note) => {
       return {
+        id: note.id,
         title: decryptMessage(key, note.titolo),
         description: decryptMessage(key, note.testo),
         dataora: note.dataora,
