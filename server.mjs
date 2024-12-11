@@ -477,6 +477,13 @@ app.post("/addNote", async (req, res) => {
     return sendErrorResponse(res, ERROR, "Invalid inputs");
   }
 
+  const currentDate = new Date();
+  const noteDate = new Date(date);
+
+  if (isNaN(noteDate.getTime()) || noteDate <= currentDate || noteDate.getFullYear() > currentDate.getFullYear() + 10) {
+    return sendErrorResponse(res, ERROR, "Invalid date. Date must be after today and within a reasonable future range.");
+  }
+
   email = encryptMessage(process.env.ENCRYPT_KEY, email);
   title = encryptMessage(key, title);
   description = encryptMessage(key, description);
