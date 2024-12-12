@@ -516,6 +516,39 @@ app.post("/addNote", async (req, res) => {
 });
 
 /*
+  note deletion route
+  @param key: user key
+  @param noteId: note ID
+
+  @return message: "OK" if the note was deleted
+*/
+app.delete("/deleteNote", async (req, res) => {
+  const { key, noteId } = req.body;
+  if (!key || !noteId) {
+    return sendErrorResponse(res, ERROR, "Invalid inputs");
+  }
+
+  try {
+    const query = `
+    DELETE FROM note
+    USING studenti
+    WHERE note.id = $1 AND studenti.chiave = $2 AND note.idStudente = studenti.email
+  `;
+    const params = [noteId, key];
+    const result = await client.query(query, params);
+
+    if (result.rowCount === 0) {
+      return sendErrorResponse(res, ERROR, "Note not found or user not authorized");
+    }
+
+    sendSuccessResponse(res, { message: "Note deleted successfully" });
+  } catch (err) {
+    sendErrorResponse(res, INTERNALERR, err.message);
+  }
+});
+
+
+/*
     notes fetch route
     @param key: user key
     @param email: user email
