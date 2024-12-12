@@ -349,7 +349,7 @@ app.post("/login", async (req, res) => {
     @return message: "OK" if the user was deleted or if no action was taken because the user was not found
 */
 
-app.delete("/userDelete", async (req, res) => {
+app.post("/userDelete", async (req, res) => {
   let { key, email, password } = req.body;
   if (!key || !email || !password) {
     return sendErrorResponse(res, ERROR, "Invalid inputs");
@@ -397,7 +397,7 @@ app.delete("/userDelete", async (req, res) => {
 
     @return message: "OK" if the user was updated
 */
-app.patch("/userUpdate", async (req, res) => {
+app.post("/userUpdate", async (req, res) => {
   let { key, email, password, ntema, name } = req.body;
   if (!key) {
     return sendErrorResponse(res, ERROR, "Key is required");
@@ -522,7 +522,7 @@ app.post("/addNote", async (req, res) => {
 
   @return message: "OK" if the note was deleted
 */
-app.delete("/deleteNote", async (req, res) => {
+app.post("/deleteNote", async (req, res) => {
   const { key, noteId } = req.body;
   if (!key || !noteId) {
     return sendErrorResponse(res, ERROR, "Invalid inputs");
