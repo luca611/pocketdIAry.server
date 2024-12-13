@@ -33,16 +33,17 @@ app.use(
   })
 );
 
-//--- db connection ---
+
 const client = new Client({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: {
+    ca: Buffer.from(process.env.AIVEN_CA_CERT, 'base64').toString('utf-8'),
+  },
 });
 
-client
-  .connect()
-  .then(() => console.log("✓ -> Connected to PostgreSQL successfully"))
-  .catch((err) => console.error("Connection error", err.stack));
+client.connect()
+  .then(() => console.log('✓ -> Connected to PostgreSQL successfully'))
+  .catch((err) => console.error('Connection error', err.stack));
 
 //--- endpoints logic ---
 
