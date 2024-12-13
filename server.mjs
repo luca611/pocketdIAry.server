@@ -473,6 +473,10 @@ app.post("/userUpdate", async (req, res) => {
 
 app.post("/addNote", async (req, res) => {
   let { key, title, description, date, email } = req.body;
+
+  if (title.length > 128) {
+    return sendErrorResponse(res, ERROR, "title is too long")
+  }
   if (!key || !title || !description || !date || !email) {
     return sendErrorResponse(res, ERROR, "Invalid inputs");
   }
@@ -662,6 +666,10 @@ app.post("/checkAvailability", async (req, res) => {
 
   if (!email || email.length > 128) {
     return sendErrorResponse(res, ERROR, "Invalid email");
+  }
+
+  if (!validateEmailFormat(email)) {
+    return sendErrorResponse(res, ERROR, "Invalid email format.");
   }
 
   try {
