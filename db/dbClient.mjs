@@ -14,14 +14,22 @@ export const client = new Client({
     ssl: { rejectUnauthorized: false },
 });
 
+/**
+ * Attempts to establish a connection to the PostgreSQL database.
+ * @returns {Promise<void>} Resolves when the connection is successfully established.
+ */
 export const connectDB = async () => {
     try {
-        console.log("Attempting to connect to PostgreSQL...");
+        console.warn("Attempting to connect to PostgreSQL...");
         await client.connect();
-        console.log("✓ -> Connected to PostgreSQL successfully");
+        console.warn("✓ -> Connected to PostgreSQL successfully");
     } catch (err) {
         console.error("X -> Connection error:", err.message);
     }
+    client.on('error', (err) => {
+        console.warn("Database connection lost:", err.message);
+    });
 };
+
 
 export default client;
