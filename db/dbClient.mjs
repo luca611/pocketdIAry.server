@@ -26,12 +26,6 @@ export const connectDB = async () => {
     } catch (err) {
         console.error("X -> Connection error:", err.message);
     }
-    client.on('error', (err) => {
-        console.warn("Database connection lost:", err.message);
-
-        //reconnect
-        connectDB();
-    });
 };
 
 

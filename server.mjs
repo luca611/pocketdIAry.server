@@ -125,6 +125,15 @@ app.get("/ping", (req, res) => {
   res.status(200).send("OK");
 });
 
+app.get("/pingDB", (req, res) => {
+  client.query("SELECT 1", (err) => {
+    if (err) {
+      return sendErrorResponse(res, INTERNALERR, "Database connection failed");
+    }
+    return sendSuccessResponse(res, "Database connection successful");
+  });
+});
+
 //--- error handling ---
 
 app.use((req, res) => {

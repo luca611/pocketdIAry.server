@@ -42,6 +42,9 @@ export const keepAlive = () => {
     setInterval(async () => {
         try {
             await axios.get('https://pocketdiary-server.onrender.com/ping');
+            await axios.get('https://pocketdiary-server.onrender.com/pingDB');
+            console.warn('Ping successful at:' + new Date().toLocaleString());
+
         } catch (error) {
             console.error('Ping failed:', error.message);
         }
