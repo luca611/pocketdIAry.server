@@ -1,182 +1,32 @@
-import fetch from "node-fetch";
 import express from "express";
 import dotenv from "dotenv";
-import crypto from "crypto";
 import cors from "cors";
 
-import pkg from "pg";
+import { handleChat } from "./controllers/chatController.mjs";
+import { getAvailableRoutes, keepAlive } from "./utils/serverUtils.mjs";
+import { sendErrorResponse, sendSuccessResponse } from "./utils/response.mjs";
 
-const INTERVAL = 4 * 60 * 1000;
-const ERROR = 400;
-const SUCCESS = 200;
-const INTERNALERR = 500;
-const NOTFOUND = 404;
+import { encryptMessage, decryptMessage } from "./utils/encryption.mjs";
+import { client, connectDB } from "./db/dbClient.mjs";
+import { login, deleteUser, updateTheme, updatePassword, updateName, register } from "./controllers/userController.mjs";
+import { deleteNote, getNotes, getTodayNotes, addNote } from "./controllers/noteController.mjs";
+import { checkEmailExists } from "./utils/validation.mjs";
 
-const AIAPIURL = "https://api.groq.com/openai/v1/chat/completions";
-const AIMODEL = "llama3-70b-8192";
+import { ERROR, INTERNALERR, NOTFOUND } from "./utils/constants.mjs";
 
-const { Client } = pkg;
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3005;
 
-//--- loading env ---
-
 app.use(express.json());
-dotenv.config();
+app.use(cors({ origin: "*", methods: "GET,POST,DELETE,PATCH", allowedHeaders: ["Content-Type", "Authorization"] }));
 
-app.use(
-  cors({
-    origin: "*", // Allow all origins temporarily
-    methods: "GET,POST,DELETE,PATCH",
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+connectDB();
 
-//--- db connection ---
-const client = new Client({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
 
-client
-  .connect()
-  .then(() => console.log("✓ -> Connected to PostgreSQL successfully"))
-  .catch((err) => console.error("Connection error", err.stack));
 
-//--- endpoints logic ---
-
-async function getAiResponse(userMessage) {
-  try {
-    const response = await fetch(AIAPIURL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messages: [{ role: "user", content: userMessage }],
-        model: AIMODEL,
-      }),
-    });
-    const data = await response.json();
-    return data.choices[0]?.message?.content || "No response";
-  } catch (error) {
-    console.error("x -> Error: fetching AI API:", error);
-    return "Error communicating with AI API";
-  }
-}
-
-function keepServerAlive() {
-  setInterval(async () => {
-    try {
-      await fetch(`http://localhost:${PORT}/`);
-      await client.query("SELECT 1");
-      console.log("✓ -> Keepalive executed at: " + new Date().toLocaleString());
-    } catch (error) {
-      console.error("x -> Keep-alive error:", error);
-    }
-  }, INTERVAL);
-}
-
-function generateKey() {
-  return crypto.randomBytes(32).toString("hex");
-}
-
-function encryptMessage(key, message) {
-  const iv = Buffer.alloc(16, 0);
-  const cipher = crypto.createCipheriv(
-    "aes-256-cbc",
-    Buffer.from(key, "hex"),
-    iv
-  );
-  let encrypted = cipher.update(message, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  return encrypted;
-}
-
-function decryptMessage(key, encryptedMessage) {
-  const iv = Buffer.alloc(16, 0);
-  const decipher = crypto.createDecipheriv(
-    "aes-256-cbc",
-    Buffer.from(key, "hex"),
-    iv
-  );
-  let decrypted = decipher.update(encryptedMessage, "hex", "utf8");
-  decrypted += decipher.final("utf8");
-  return decrypted;
-}
-
-function createHash(data) {
-  const hash = crypto.createHash("sha256");
-  hash.update(data);
-  return hash.digest("hex");
-}
-
-const sendErrorResponse = (res, status, message) =>
-  res.status(status).json({ error: message });
-const sendSuccessResponse = (res, data) => res.status(SUCCESS).json(data);
-
-const getAvailableRoutes = (app) => {
-  const routes = [];
-  app._router.stack.forEach((middleware) => {
-    if (middleware.route) {
-      const { path } = middleware.route;
-      const methods = Object.keys(middleware.route.methods)
-        .join(", ")
-        .toUpperCase();
-      routes.push({ path, methods });
-    } else if (middleware.name === "router") {
-      middleware.handle.stack.forEach((handler) => {
-        if (handler.route) {
-          const { path } = handler.route;
-          const methods = Object.keys(handler.route.methods)
-            .join(", ")
-            .toUpperCase();
-          routes.push({ path, methods });
-        }
-      });
-    }
-  });
-  return routes;
-};
-
-function validateEmailFormat(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-//--- endpoints ---
-
-// Home route
-app.get("/", (req, res) => {
-  const availableRoutes = getAvailableRoutes(app);
-  res.json({
-    message: "Welcome to Pocket API!",
-    availableEndpoints: availableRoutes,
-  });
-});
-
-/*
-    Chat route
-    @param message: user message
-
-    @return response: AI response
-*/
-app.post("/chat", async (req, res) => {
-  const { message } = req.body;
-  if (!message) {
-    return sendErrorResponse(res, ERROR, "Message not provided");
-  }
-
-  try {
-    const response = await getAiResponse(message);
-    sendSuccessResponse(res, { response });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
-});
-
+// --- test routes ---
 /*
     Query route
     @param query: SQL query
@@ -245,467 +95,33 @@ app.post("/decrypt", (req, res) => {
   }
 });
 
-/*
-    Register route
-    @param email: user email
-    @param password: user password
-    @param ntema: user theme
-    @param name: user name
 
-    @return message: "OK" if the user was registered
-*/
-app.post("/register", async (req, res) => {
-  const { email, password, ntema, name } = req.body;
+//--- routes ---
 
-  // Input validation
-  if (
-    !email ||
-    !password ||
-    !name ||
-    typeof ntema !== "number" ||
-    email.length > 128 ||
-    password.length > 128 ||
-    name.length > 128
-  ) {
-    return sendErrorResponse(res, ERROR, "Invalid input parameters.");
-  }
-
-  if (!validateEmailFormat(email)) {
-    return sendErrorResponse(res, ERROR, "Invalid email format.");
-  }
-
-  try {
-    const encryptedEmail = encryptMessage(process.env.ENCRYPT_KEY, email);
-    const encryptedName = encryptMessage(process.env.ENCRYPT_KEY, name);
-    const hashedPassword = createHash(password);
-    const generatedKey = generateKey();
-
-    // Insert into the database
-    const insertQuery = `
-      INSERT INTO studenti (email, password, ntema, nome, chiave)
-      VALUES ($1, $2, $3, $4, $5)
-    `;
-    const insertParams = [encryptedEmail, hashedPassword, ntema, encryptedName, generatedKey];
-    await client.query(insertQuery, insertParams);
-
-    sendSuccessResponse(res, { message: "Registration successful!" });
-  } catch (error) {
-    if (error.code === "23505") {
-      return sendErrorResponse(res, ERROR, "Email already registered.");
-    }
-    console.error("Error during registration:", error.message);
-    sendErrorResponse(res, INTERNALERR, "An error occurred. Please try again.");
-  }
-});
-/*
-    Login route
-    @param email: user email
-    @param password: user password
-
-    @return key: user key
-*/
-
-app.post("/login", async (req, res) => {
-  let { email, password } = req.body;
-  if (!email || !password) {
-    return sendErrorResponse(res, ERROR, "Invalid inputs");
-  }
-
-  try {
-    email = encryptMessage(process.env.ENCRYPT_KEY, email);
-    password = createHash(password);
-
-    const query = `
-        SELECT chiave, nome, ntema
-        FROM studenti
-        WHERE email = $1 AND password = $2
-        `;
-    const params = [email, password];
-    const result = await client.query(query, params);
-
-    if (result.rows.length === 0) {
-      return sendErrorResponse(res, ERROR, "Invalid credentials");
-    }
-
-    const user = result.rows[0];
-    const name = decryptMessage(process.env.ENCRYPT_KEY, user.nome);
-
-    sendSuccessResponse(res, {
-      key: user.chiave,
-      name: name,
-      theme: user.ntema
-    });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
+app.get("/", (req, res) => {
+  const availableRoutes = getAvailableRoutes(app);
+  res.json({
+    message: "Welcome to Pocket API!",
+    availableEndpoints: availableRoutes,
+  });
 });
 
-/*
-    user deletion route
-    @param key: user key
-    @param email: user email
-    @param password: user password
+app.post("/chat", handleChat);
+app.post("/register", register);
+app.post("/login", login);
+app.post("/userDelete", deleteUser);
+app.post("/changeTheme", updateTheme);
+app.post("/changePassword", updatePassword);
+app.post("/changeName", updateName);
+app.post("/addNote", addNote);
+app.post("/deleteNote", deleteNote);
+app.post("/getNotes", getNotes);
+app.post("/getTodayNotes", getTodayNotes);
+app.post("/checkAvailability", checkEmailExists);
+
+
+//--- error handling ---
 
-    @return message: "OK" if the user was deleted or if no action was taken because the user was not found
-*/
-
-app.post("/userDelete", async (req, res) => {
-  let { key, email, password } = req.body;
-  if (!key || !email || !password) {
-    return sendErrorResponse(res, ERROR, "Invalid inputs");
-  }
-
-  email = encryptMessage(process.env.ENCRYPT_KEY, email);
-  password = createHash(password);
-
-  try {
-    const query = `
-            SELECT * FROM studenti
-            WHERE chiave = $1 AND email = $2 AND password = $3
-        `;
-    const params = [key, email, password];
-    let result = await client.query(query, params);
-
-    if (result.rows.length === 0) {
-      return sendSuccessResponse(res, { message: "no user found" });
-    }
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
-
-  try {
-    const query = `
-            DELETE FROM studenti
-            WHERE chiave = $1 AND email = $2 AND password = $3
-        `;
-    const params = [key, email, password];
-    await client.query(query, params);
-
-    sendSuccessResponse(res, { message: "OK" });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
-});
-
-/*
-    user information update route
-    @param key: user key
-    @param email: user email <optional>
-    @param password: user password <optional>
-    @param ntema: user theme <optional>
-    @param name: user name <optional>
-
-    @return message: "OK" if the user was updated
-*/
-app.post("/userUpdate", async (req, res) => {
-  let { key, email, password, ntema, name } = req.body;
-  if (!key) {
-    return sendErrorResponse(res, ERROR, "Key is required");
-  }
-
-  if (
-    email.length > 128 ||
-    password > 128 ||
-    typeof ntema !== "number" ||
-    name > 128
-  ) {
-    return sendErrorResponse(
-      res,
-      ERROR,
-      "A parameter is too long or the type dosen't match the expected one"
-    );
-  }
-
-  let updateFields = [];
-  let params = [];
-
-  if (email) {
-    email = encryptMessage(process.env.ENCRYPT_KEY, email);
-    updateFields.push("email = $" + (params.length + 1));
-    params.push(email);
-  }
-
-  if (password && password.length <= 128) {
-    password = createHash(password);
-    updateFields.push("password = $" + (params.length + 1));
-    params.push(password);
-  }
-
-  if (typeof ntema === "number") {
-    updateFields.push("ntema = $" + (params.length + 1));
-    params.push(ntema);
-  }
-
-  if (name && name.length <= 128) {
-    name = encryptMessage(process.env.ENCRYPT_KEY, name);
-    updateFields.push("nome = $" + (params.length + 1));
-    params.push(name);
-  }
-
-  if (updateFields.length === 0) {
-    return sendErrorResponse(res, ERROR, "No fields to update");
-  }
-
-  params.push(key);
-
-  const query = `
-        UPDATE studenti
-        SET ${updateFields.join(", ")}
-        WHERE chiave = $${params.length}
-    `;
-
-  try {
-    await client.query(query, params);
-    sendSuccessResponse(res, { message: "OK - Executed:" + query });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
-});
-
-/*
-    note creation route
-    @param key: user key
-    @param title: note title
-    @param description: note description
-    @param date: note expire date
-    @param email: user email
-*/
-
-app.post("/addNote", async (req, res) => {
-  let { key, title, description, date, email } = req.body;
-
-  if (title.length > 128) {
-    return sendErrorResponse(res, ERROR, "title is too long")
-  }
-  if (!key || !title || !description || !date || !email) {
-    return sendErrorResponse(res, ERROR, "Invalid inputs");
-  }
-
-  const currentDate = new Date();
-  const noteDate = new Date(date);
-
-  currentDate.setHours(0, 0, 0, 0);
-  noteDate.setHours(0, 0, 0, 0);
-
-  if (isNaN(noteDate.getTime()) || noteDate < currentDate || noteDate.getFullYear() > currentDate.getFullYear() + 10) {
-    return sendErrorResponse(res, ERROR, "Date must be from today and within a reasonable future range.");
-  }
-
-  email = encryptMessage(process.env.ENCRYPT_KEY, email);
-  title = encryptMessage(key, title);
-  description = encryptMessage(key, description);
-
-  try {
-    let query = `
-            SELECT * from studenti WHERE chiave = $1 and email = $2
-        `;
-    let params = [key, email];
-    let result = await client.query(query, params);
-
-    if (result.rows.length === 0) {
-      return sendErrorResponse(res, ERROR, "user not found");
-    }
-
-    query = `
-            INSERT INTO note (dataora, titolo, testo, idStudente)
-            VALUES ($1, $2, $3, $4)
-        `;
-    params = [date, title, description, email];
-    await client.query(query, params);
-
-    sendSuccessResponse(res, { message: "OK" });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
-});
-
-/*
-  note deletion route
-  @param key: user key
-  @param noteId: note ID
-
-  @return message: "OK" if the note was deleted
-*/
-app.post("/deleteNote", async (req, res) => {
-  const { key, noteId } = req.body;
-  if (!key || !noteId) {
-    return sendErrorResponse(res, ERROR, "Invalid inputs");
-  }
-
-  try {
-    const query = `
-    DELETE FROM note
-    USING studenti
-    WHERE note.id = $1 AND studenti.chiave = $2 AND note.idStudente = studenti.email
-  `;
-    const params = [noteId, key];
-    const result = await client.query(query, params);
-
-    if (result.rowCount === 0) {
-      return sendErrorResponse(res, ERROR, "Note not found or user not authorized");
-    }
-
-    sendSuccessResponse(res, { message: "Note deleted successfully" });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
-});
-
-
-/*
-    notes fetch route
-    @param key: user key
-    @param email: user email
-    @param date: note date
-
-    @return notes: list of notes
-
-    warning: for some reasons postgree dastes are 1 day behind
-             this won't affect the functionality of the endpoin
-             but will appear in the output
-*/
-
-app.post("/getNotes", async (req, res) => {
-  let { key, email, date } = req.body;
-  if (!key || !email || !date) {
-    return sendErrorResponse(res, ERROR, "Invalid inputs");
-  }
-
-  email = encryptMessage(process.env.ENCRYPT_KEY, email);
-
-  try {
-    let query = `
-            SELECT * from studenti WHERE chiave = $1 and email = $2
-        `;
-    let params = [key, email];
-    let result = await client.query(query, params);
-
-    if (result.rows.length === 0) {
-      return sendErrorResponse(res, ERROR, "user not found");
-    }
-
-    query = `
-            SELECT * from note WHERE idStudente = $1 AND dataora = $2 
-        `;
-    params = [email, date];
-    result = await client.query(query, params);
-
-    let notes = result.rows.map((note) => {
-      return {
-        title: decryptMessage(key, note.titolo),
-        description: decryptMessage(key, note.testo),
-        dataora: note.dataora,
-      };
-    });
-
-    sendSuccessResponse(res, { notes });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
-});
-
-/*
-    notes fetch route
-    @param key: user key
-    @param email: user email
-    
-    @return notes: list of today notes
-
-    warning: shares the same issue as the previous endpoint
-*/
-
-app.post("/getTodayNotes", async (req, res) => {
-  let { key, email } = req.body;
-  if (!key || !email) {
-    return sendErrorResponse(res, ERROR, "Invalid inputs");
-  }
-
-  email = encryptMessage(process.env.ENCRYPT_KEY, email);
-
-  try {
-    // Check if the user exists in the database
-    let query = `SELECT * FROM studenti WHERE chiave = $1 AND email = $2`;
-    let params = [key, email];
-    let result = await client.query(query, params);
-
-    if (result.rows.length === 0) {
-      return sendErrorResponse(res, ERROR, "User not found");
-    }
-
-    // Fetch the notes for the current day
-    query = `SELECT * FROM note WHERE idStudente = $1 AND dataora = CURRENT_DATE`;
-    params = [email];
-    result = await client.query(query, params);
-
-    let notes = result.rows.map((note) => {
-      return {
-        id: note.id,
-        title: decryptMessage(key, note.titolo),
-        description: decryptMessage(key, note.testo),
-        dataora: note.dataora,
-      };
-    });
-
-    // If no notes, return an empty array
-    sendSuccessResponse(res, { notes: notes.length > 0 ? notes : [] });
-  } catch (err) {
-    console.error("Error during fetch:", err.message);
-    return sendErrorResponse(res, INTERNALERR, "An error occurred on the server.");
-  }
-});
-
-/*
-    notes fetch route
-    @param key: user key
-    @param email: user email
-
-    @return notes: list of all notes
-*/
-app.post("/checkAvailability", async (req, res) => {
-  const { email } = req.body;
-
-  if (!email || email.length > 128) {
-    return sendErrorResponse(res, ERROR, "Invalid email");
-  }
-
-  if (!validateEmailFormat(email)) {
-    return sendErrorResponse(res, ERROR, "Invalid email format.");
-  }
-
-  try {
-    const emailExists = await checkEmailExists(email);
-
-    if (emailExists) {
-      return sendErrorResponse(res, ERROR, "Email is already taken");
-    }
-
-    sendSuccessResponse(res, { message: "Email is available" });
-  } catch (err) {
-    sendErrorResponse(res, INTERNALERR, err.message);
-  }
-});
-
-async function checkEmailExists(email) {
-  const encryptedEmail = encryptMessage(process.env.ENCRYPT_KEY, email);
-  const checkQuery = `SELECT 1 FROM studenti WHERE email = $1 LIMIT 1`;
-  const checkParams = [encryptedEmail];
-
-  try {
-    const result = await client.query(checkQuery, checkParams);
-    return result.rows.length > 0; // Returns true if the email exists
-  } catch (err) {
-    console.error("Error checking email existence:", err);
-    return false; // In case of error, assume email doesn't exist
-  }
-}
-
-//--- not existing endpoint handler ---
-
-/*
-    Not existing endpoint handler
- 
-    @return availableEndpoints: list of available endpoints
-*/
 app.use((req, res) => {
   console.warn(
     `⚠ -> Attempt to access unknown endpoint: ${req.method} ${req.originalUrl}`
@@ -717,11 +133,17 @@ app.use((req, res) => {
   });
 });
 
+//--- ping route ---
+
+app.get("/ping", (req, res) => {
+  res.status(200).send("OK");
+});
+
 //--- server start ---
 app.listen(PORT, () => {
   console.log(`------------------------------------------------`);
   console.log(`Server is running on port ${PORT}`);
   console.log(`------------------------------------------------`);
 
-  keepServerAlive();
+  keepAlive();
 });
