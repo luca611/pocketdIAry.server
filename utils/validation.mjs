@@ -5,6 +5,8 @@
 
 import { encryptMessage } from "./encryption.mjs";
 import { client } from "../db/dbClient.mjs";
+import { sendErrorResponse, sendSuccessResponse } from "./response.mjs";
+import { ERROR } from "./constants.mjs";
 
 /**
  * Validates the format of an email address.
@@ -24,16 +26,24 @@ export function validateEmailFormat(email) {
  * @returns {Promise<boolean>} - A promise that resolves to true if the email exists, false otherwise.
  * @throws {Error} - Throws an error if there is an issue with the database query.
  */
-export async function checkEmailExists(email) {
+export async function checkEmailExists(req, res) {
+    const email = req.body.email;
+    if (!validateEmailFormat(email)) {
+        return sendErrorResponse(res, ERROR, "Invalid email format");
+    }
     const encryptedEmail = encryptMessage(process.env.ENCRYPT_KEY, email);
     const checkQuery = 'SELECT 1 FROM studenti WHERE email = $1 LIMIT 1';
     const checkParams = [encryptedEmail];
 
     try {
         const result = await client.query(checkQuery, checkParams);
-        return result.rows.length > 0; // Returns true if the email exists
+        if (result.rows.length > 0) {
+            return sendErrorResponse(res, ERROR, "Email already exists");
+        }
+        else {
+            return sendSuccessResponse(res, "Email does not exist");
+        }
     } catch (err) {
-        console.error("Error checking email existence:", err);
-        return false; // In case of error, assume email doesn't exist
+        return sendErrorResponse(res, ERROR, err.message);
     }
 }
