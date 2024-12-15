@@ -119,6 +119,11 @@ app.post("/getNotes", getNotes);
 app.post("/getTodayNotes", getTodayNotes);
 app.post("/checkAvailability", checkEmailExists);
 
+//--- ping route ---
+
+app.get("/ping", (req, res) => {
+  res.status(200).send("OK");
+});
 
 //--- error handling ---
 
@@ -133,11 +138,6 @@ app.use((req, res) => {
   });
 });
 
-//--- ping route ---
-
-app.get("/ping", (req, res) => {
-  res.status(200).send("OK");
-});
 
 //--- server start ---
 app.listen(PORT, () => {
