@@ -28,6 +28,9 @@ export const connectDB = async () => {
     }
     client.on('error', (err) => {
         console.warn("Database connection lost:", err.message);
+
+        //reconnect
+        connectDB();
     });
 };
 
