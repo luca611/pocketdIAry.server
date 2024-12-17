@@ -19,11 +19,29 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3005;
 
-app.use(express.json());
+/*--- middleware ---
+
+    This will firstr parse the request body as JSON and then check if the JSON is valid.
+    If the JSON is invalid, an error response will be sent. 
+*/
+app.use((req, res, next) => {
+  express.json()(req, res, (jsonError) => {
+    if (jsonError) {
+      sendErrorResponse(res, ERROR, "Invalid JSON format");
+      return;
+    }
+    next();
+  });
+});
+
+/* --- CORS ---
+
+    will be soon chnaged to only allow requests from the client's domain 
+    but for now it's open to all origins
+*/
 app.use(cors({ origin: "*", methods: "GET,POST,DELETE,PATCH", allowedHeaders: ["Content-Type", "Authorization"] }));
 
 connectDB();
-
 
 
 // --- test routes ---
@@ -87,11 +105,7 @@ app.post("/decrypt", (req, res) => {
     const decryptedMessage = decryptMessage(key, message);
     sendSuccessResponse(res, { decryptedMessage });
   } catch {
-    sendErrorResponse(
-      res,
-      INTERNALERR,
-      "message cannot be decrypted with the provided key"
-    );
+    sendErrorResponse(res, INTERNALERR, "message cannot be decrypted with the provided key");
   }
 });
 
@@ -107,24 +121,57 @@ app.get("/", (req, res) => {
 });
 
 app.post("/chat", handleChat);
+
+/*
+    User routes
+    - register
+    - login
+    - userDelete
+    - changeTheme
+    - changePassword
+    - changeName
+    - checkAvailability
+*/
 app.post("/register", register);
 app.post("/login", login);
 app.post("/userDelete", deleteUser);
 app.post("/changeTheme", updateTheme);
 app.post("/changePassword", updatePassword);
 app.post("/changeName", updateName);
+
+/*
+    Note routes
+    - addNote
+    - deleteNote
+    - getNotes
+    - getTodayNotes
+*/
 app.post("/addNote", addNote);
 app.post("/deleteNote", deleteNote);
 app.post("/getNotes", getNotes);
 app.post("/getTodayNotes", getTodayNotes);
+
+/*
+    other useful routes
+    - checkEmailExists
+*/
 app.post("/checkAvailability", checkEmailExists);
 
-//--- ping route ---
+
+/*
+    Ping route, it's only used inside the server to avoid render auto-sleep
+    since it will make a request to the server every 5 minutes (time before render auto-sleep kicks in)
+    @return OK
+*/
 
 app.get("/ping", (req, res) => {
   res.status(200).send("OK");
 });
 
+/*
+    Ping DB route, as the previous one, it's only used inside the server to avoid neon auto-sleep this time 
+    @return Database connection successful
+*/
 app.get("/pingDB", (req, res) => {
   client.query("SELECT 1", (err) => {
     if (err) {
@@ -134,12 +181,12 @@ app.get("/pingDB", (req, res) => {
   });
 });
 
-//--- error handling ---
-
+/*
+    404 route, will be used when a request is made to an unknown endpoint also will return the available endpoints witch
+    might be useful or not but i guess it's not a bad idea to have them listed
+    @return error: Endpoint not found
+*/
 app.use((req, res) => {
-  console.warn(
-    `⚠ -> Attempt to access unknown endpoint: ${req.method} ${req.originalUrl}`
-  );
   const availableRoutes = getAvailableRoutes(app);
   res.status(NOTFOUND).json({
     error: "Endpoint not found",
