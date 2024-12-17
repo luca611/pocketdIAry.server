@@ -116,6 +116,7 @@ export async function getNotes(req, res) {
 
 /**
  * Fetches the notes for the current day for a specific user.
+ * TO DO: time zone handling for the current date.
  *
  * @param {Object} req - The request object.
  * @param {Object} req.body - The body of the request.
