@@ -9,7 +9,7 @@ import { sendErrorResponse, sendSuccessResponse } from "./utils/response.mjs";
 import { encryptMessage, decryptMessage } from "./utils/encryption.mjs";
 import { client, connectDB } from "./db/dbClient.mjs";
 import { login, deleteUser, updateTheme, updatePassword, updateName, register } from "./controllers/userController.mjs";
-import { deleteNote, getNotes, getTodayNotes, addNote, getNoteById } from "./controllers/noteController.mjs";
+import { deleteNote, getNotes, getTodayNotes, addNote, getNoteById, updateNote } from "./controllers/noteController.mjs";
 import { checkEmailExists } from "./utils/validation.mjs";
 
 import { ERROR, INTERNALERR, NOTFOUND } from "./utils/constants.mjs";
@@ -151,6 +151,7 @@ app.post("/deleteNote", deleteNote);
 app.post("/getNotes", getNotes);
 app.post("/getTodayNotes", getTodayNotes);
 app.post("/getNoteById", getNoteById);
+app.post("/updateNote", updateNote);
 
 /*
     other useful routes

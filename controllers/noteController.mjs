@@ -260,3 +260,64 @@ export async function getNoteById(req, res) {
         return sendErrorResponse(res, INTERNALERR, err.message);
     }
 }
+
+/**
+ * Updates a note in the database based on the provided note ID.
+ *
+ * @param {Object} req - The request object.
+ * @param {Object} req.body - The body of the request.
+ * @param {string} req.body.key - The key to identify the student.
+ * @param {string} req.body.email - The email of the student.
+ * @param {number} req.body.id - The ID of the note to update.
+ * @param {string} req.body.title - The new title of the note.
+ * @param {string} req.body.description - The new description of the note.
+ * @param {string} req.body.date - The new date of the note.
+ * @param {Object} res - The response object.
+ * @returns {Promise<void>} - A promise that resolves when the note is updated.
+ */
+export async function updateNote(req, res) {
+    let { key, email, id, title, description, date } = req.body;
+    if (!key || !email || !id || !title || !description || !date) {
+        return sendErrorResponse(res, ERROR, "Invalid inputs");
+    }
+
+    if (title.length > 128) {
+        return sendErrorResponse(res, ERROR, "title is too long");
+    }
+
+    const currentDate = new Date();
+    const noteDate = new Date(date);
+
+    currentDate.setHours(0, 0, 0, 0);
+    noteDate.setHours(0, 0, 0, 0);
+
+    if (isNaN(noteDate.getTime()) || noteDate < currentDate || noteDate.getFullYear() > currentDate.getFullYear() + 10) {
+        return sendErrorResponse(res, ERROR, "Date must be from today and within a reasonable future range.");
+    }
+
+    email = encryptMessage(process.env.ENCRYPT_KEY, email);
+    title = encryptMessage(key, title);
+    description = encryptMessage(key, description);
+
+    try {
+        let query = `
+            SELECT * from studenti WHERE chiave = $1 and email = $2
+        `;
+        let params = [key, email];
+        const result = await client.query(query, params);
+
+        if (result.rows.length === 0) {
+            return sendErrorResponse(res, ERROR, "user not found");
+        }
+
+        query = `
+            UPDATE note SET titolo = $1, testo = $2, dataora = $3 WHERE id = $4 AND idStudente = $5
+        `;
+        params = [title, description, date, id, email];
+        await client.query(query, params);
+
+        return sendSuccessResponse(res, { message: "OK" });
+    } catch (err) {
+        return sendErrorResponse(res, INTERNALERR, err.message);
+    }
+}
