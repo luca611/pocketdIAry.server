@@ -206,3 +206,57 @@ export async function deleteNote(req, res) {
         return sendErrorResponse(res, INTERNALERR, err.message);
     }
 }
+
+/**
+ * Retrieves a note by its ID for a specific student based on the provided key and email.
+ *
+ * @param {Object} req - The request object.
+ * @param {Object} req.body - The body of the request.
+ * @param {string} req.body.key - The key to identify the student.
+ * @param {string} req.body.email - The email of the student.
+ * @param {number} req.body.id - The ID of the note to retrieve.
+ * @param {Object} res - The response object.
+ * @returns {Promise<void>} - Sends a response with the note or an error message.
+ */
+export async function getNoteById(req, res) {
+    let { key, email, id } = req.body;
+    if (!key || !email || !id) {
+        return sendErrorResponse(res, ERROR, "Invalid inputs");
+    }
+
+    email = encryptMessage(process.env.ENCRYPT_KEY, email);
+
+    try {
+        let query = `
+            SELECT * from studenti WHERE chiave = $1 and email = $2
+        `;
+        let params = [key, email];
+        let result = await client.query(query, params);
+
+        if (result.rows.length === 0) {
+            return sendErrorResponse(res, ERROR, "user not found");
+        }
+
+        query = `
+            SELECT * from note WHERE id = $1 AND idStudente = $2
+        `;
+        params = [id, email];
+        result = await client.query(query, params);
+
+        if (result.rows.length === 0) {
+            return sendErrorResponse(res, ERROR, "note not found");
+        }
+
+        const note = result.rows[0];
+        const decryptedNote = {
+            id: note.id,
+            title: decryptMessage(key, note.titolo),
+            description: decryptMessage(key, note.testo),
+            dataora: note.dataora,
+        };
+
+        return sendSuccessResponse(res, { note: decryptedNote });
+    } catch (err) {
+        return sendErrorResponse(res, INTERNALERR, err.message);
+    }
+}
