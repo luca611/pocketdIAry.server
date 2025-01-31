@@ -110,6 +110,7 @@ app.post("/decrypt", (req, res) => {
 });
 
 
+keepAlive();
 //--- routes ---
 
 app.get("/", (req, res) => {
